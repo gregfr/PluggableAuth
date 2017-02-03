@@ -15,7 +15,8 @@ require_once dirname(__FILE__).'/iAUTH_plugin.intf.php';
  * This class provides a substitute for the default StandardLogin,
  * allowing to authenticate from alternate sources
  *
- * Actual source-specific implementations are provided by plugins
+ * Actual source-specific implementations are provided by plugins; they can either enhance the login process
+ * with the decorator pattern, or provide external authentication sources.
  *
  * @author greg <greg@phpdevshell.org>
  * @package PluggableAuth
@@ -23,14 +24,22 @@ require_once dirname(__FILE__).'/iAUTH_plugin.intf.php';
  */
 class AUTH_login extends StandardLogin
 {
+    /**
+     * @param bool $return
+     *
+     * @return false|string Some html representing the login form
+     */
     public function loginForm($return = false)
     {
-        $html = $this->inform('before_display_login_form');
-        $html .= parent::loginForm(true);
+        $html_before = $this->inform('before_display_login_form');
+        $html_form = parent::loginForm(true);
+        $html_after = $this->inform('after_display_login_form', $html_form);
+
+        $html = $html_before.$html_form.$html_after;
 
         if ($return == false) {
             echo $html;
-            return;
+            return false;
         } else {
             return $html;
         }
@@ -46,9 +55,9 @@ class AUTH_login extends StandardLogin
      * Note: no caching is provided since it's very unlikely we would need
      * the same source twice in the same request
      *
-     * @param string $className (optional) name of the source
+     * @param string|null $className (optional) Name of the source class to intantiate
      *
-     * @return iAUTH_plugin
+     * @return iAUTH_plugin|false
      *
      * @throws PHPDS_exception
      *
@@ -66,6 +75,7 @@ class AUTH_login extends StandardLogin
         }
 
         if (!empty($className) && class_exists($className)) {
+            /** @var iAUTH_plugin $auth The plugin providing external authentication */
             $auth = $this->factory($className);
             if (is_a($auth, 'iAUTH_plugin')) {
                 return $auth;
@@ -82,8 +92,8 @@ class AUTH_login extends StandardLogin
      *
      * If no password is provided, only the username is checked against the local database
      *
-     * @param string $username
-     * @param string $password
+     * @param string $username The username (login) to look for
+     * @param string|null $password The password to use to actually find the user data
      * @return array the user's data array
      *
      * @version 1.0
